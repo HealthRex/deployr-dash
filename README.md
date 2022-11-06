@@ -1,7 +1,5 @@
 # Deployr Dashboard
 
-After that, you can follow the steps below. 
-
 # Table of Contents
 - [Virtual Environment](#virtual-environment)
 - [Docker Desktop](#docker-desktop)

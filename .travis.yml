@@ -1,0 +1,16 @@
+language: python
+python: 
+  - '3.8'
+
+arch:
+  - arm64
+
+env:
+  - IMGNAME=deployr_image
+
+services:
+  - docker
+
+script: 
+  - docker image build -t $IMGNAME . 
+  - py.test -v

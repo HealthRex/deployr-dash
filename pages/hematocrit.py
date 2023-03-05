@@ -59,7 +59,8 @@ def build_group_dataframe(df, df_feature_order):
     """
     Appends group information to df 
     """
-    df_race = df_feature_order[df_feature_order['features'].str.contains('race_')].reset_index()
+    df_race = df_feature_order[
+        df_feature_order['features'].str.contains('race_')].reset_index()
     race_map = {ind : race for ind, race in zip(df_race.indices, df_race.features)}
     df['group'] = [get_race_group(f, race_map) for f in df.feature_vector]
     return df

@@ -27,7 +27,8 @@ def mock_get_hct_data(start_date, end_date):
     pass
 
 def get_hct_feature_order():
-    with open(os.path.join(HCT_OUTPUT_DIR, '20230105_label_HCT_deploy.pkl'), 'rb') as f:
+    with open(os.path.join(HCT_OUTPUT_DIR, '20230105_label_HCT_deploy.pkl'),
+              'rb') as f:
         model = pickle.load(f)
     df_feature_order = pd.DataFrame(data={
         'indices' : [i for i in range(len(model['feature_order']))],

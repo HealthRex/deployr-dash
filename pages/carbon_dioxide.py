@@ -22,7 +22,9 @@ def mock_get_hct_data(start_date, end_date):
     pass
 
 def get_hct_data(start_date, end_date):
-    df = read_predictions_and_labels(start_date, end_date)
+    df = read_predictions_and_labels(start_date, 
+                                     end_date,
+                                     model='20230105_label_CO2_deploy.pkl')
 
     # Drop missing - complete case only
     df = df[df['label'] != -1]
@@ -38,8 +40,9 @@ def render_hct_results(col):
     metrics_df = pd.DataFrame({"Metrics": metrics.keys(), "Values": metrics.values()})
     image = Image.open(os.path.join(HCT_OUTPUT_DIR, "performance_curves.png"))
 
+    st.header("Global model peformance")
     st.table(metrics_df)
-    st.image(image, caption='HCT Performance Curves')
+    st.image(image, caption='Carbon dioxide Performance Curves')
 
 def app():
 

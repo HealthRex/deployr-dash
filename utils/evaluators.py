@@ -5,24 +5,28 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
-sns.set_theme(style='whitegrid', font_scale=2.0)
-
+from glob import glob
 from sklearn.metrics import (precision_score,
-    recall_score,
-    accuracy_score,
-    average_precision_score,
-    precision_recall_curve,
-    roc_auc_score,
-    roc_curve
-)
+                             recall_score,
+                             accuracy_score,
+                             average_precision_score,
+                             precision_recall_curve,
+                             roc_auc_score,
+                             roc_curve
+                             )
 
+sns.set_theme(style='whitegrid', font_scale=2.0)
 THRESHOLD_DEPENDENT = ['accuracy_score', 'recall_score', 'precision_score']
+
+import pdb
 
 class BinaryEvaluator:
 
-    def __init__(self, outdir):
+    def __init__(self, outdir, task_name=None):
         self.outdir = outdir
+        self.task_name = task_name
         self.metrics = {
+            'Prevalence': self.compute_prevalence,
             'Accuracy': accuracy_score,
             'Sensitivity': recall_score,
             'Specificity': recall_score,
@@ -39,40 +43,47 @@ class BinaryEvaluator:
         """
         self.get_performance_artifacts(labels, predictions)
 
-    def get_performance_artifacts(self, labels, predictions):
+    def get_performance_artifacts(self, labels, predictions, **kwargs):
         """
         Computes a suite of performance measures and saves artifacts
         """
         results = self.bootstrap_metric(labels, predictions, self.metrics)
+        # results['Task'] = self.task_name
+        results['N'] = str(len(labels))          
         with open(os.path.join(self.outdir, "metrics.json"), "w") as fp:
             json.dump(results, fp)
 
-        fig, axs = plt.subplots(1, 3, figsize=(30, 10))
+        fig, axs = plt.subplots(1, 2, figsize=(30, 10))
         self.plot_roc_curve(labels=labels,
                             predictions=predictions,
                             title='ROC Curve',
                             ax=axs[0])
-        self.plot_precision_recall(labels=labels,
-                                   predictions=predictions,
-                                   title='PR Curve',
-                                   ax=axs[1])
+        # self.plot_precision_recall(labels=labels,
+        #                            predictions=predictions,
+        #                            title='PR Curve',
+        #                            ax=axs[1])
         self.plot_calibration_curve(labels=labels,
                                     predictions=predictions,
                                     title='Calibration Curve',
-                                    ax=axs[2])
+                                    ax=axs[1])
         plt.savefig(os.path.join(self.outdir, 'performance_curves.png'),
                     bbox_inches='tight',
                     dpi=300)
 
-    def plot_roc_curve(self, labels, predictions, title, ax, color='black'):
+    def plot_roc_curve(self, labels, predictions, title, ax, color='black', label=None):
         fpr, tpr, thresholds = roc_curve(labels, predictions)
         auc = roc_auc_score(labels, predictions)
+        if label == None:
+            label = f"AUC=%0.2f" % auc
+        else:
+            label = f"{label} AUC=%0.2f" % auc
+
         ax.plot(
             fpr,
             tpr,
             color=color,
             lw=2.0,
-            label=f"AUC=%0.2f" % auc
+            label=label
         )
         ax.plot([0, 1], [0, 1], color="black", lw=1.0, linestyle="--")
         ax.set_xlim([0.0, 1.0])
@@ -82,20 +93,29 @@ class BinaryEvaluator:
         ax.set_title(title)
         ax.legend(loc="lower right")
 
-    def plot_precision_recall(self, labels, predictions, title, ax, color='black'):
+    def plot_precision_recall(self, labels, predictions, title, ax, label=None, color='black'):
         precision, recall, thresholds = precision_recall_curve(
             labels, predictions)
         auc = average_precision_score(labels, predictions)
+        if label == None:
+            pr_label = f"AUC=%0.2f" % auc
+        else:
+            pr_label = f"{label} AUC=%0.2f" % auc
+
         ax.plot(
             recall,
             precision,
             color=color,
             lw=2.0,
-            label=f"AUC=%0.2f" % auc
+            label=pr_label
         )
+        if label == None:
+            baseline_label = f"Baseline AUC={round(np.mean(labels), 2)}"
+        else:
+            baseline_label = f"{label} Baseline AUC={round(np.mean(labels), 2)}"
         ax.plot([0, 1], [np.mean(labels), np.mean(labels)],
                 color="black", lw=1.0, linestyle="--",
-                label=f"Baseline AUC={round(np.mean(labels), 2)}")
+                label=baseline_label)
         ax.set_xlim([0.0, 1.0])
         ax.set_ylim([0.0, 1.05])
         ax.set_xlabel("Recall")
@@ -157,7 +177,7 @@ class BinaryEvaluator:
         return prob_trues, prob_preds
 
     def plot_calibration_curve(self, labels, predictions, title, ax, n_bins=5,
-                               color='black', draw_baseline=True,
+                               color='black', draw_baseline=True, label=None,
                                sample_weight=None):
         prob_trues, prob_preds = self.calibration_curve_ci(labels, predictions,
                                                            sample_weight=sample_weight,
@@ -166,11 +186,18 @@ class BinaryEvaluator:
         prob_true = np.mean(prob_trues, axis=0)
         prob_true_lower = prob_true - np.percentile(prob_trues, 2.5, axis=0)
         prob_true_upper = np.percentile(prob_trues, 97.5, axis=0) - prob_true
+        ax.plot(
+            prob_pred,
+            prob_true,
+            color=color,
+            label=label,
+        )
         ax.scatter(
             prob_pred,
             prob_true,
-            color=color
+            color=color,
         )
+
         ax.errorbar(prob_pred,
                     prob_true,
                     np.vstack((prob_true_lower, prob_true_upper)),
@@ -186,7 +213,7 @@ class BinaryEvaluator:
             ax.set_xlabel("Predicted")
             ax.set_ylabel("Actual")
             ax.set_title(title)
-            ax.legend(loc="lower right")
+        ax.legend(loc="lower right")
 
     def bootstrap_metric(self, labels, predictions, metrics, iters=1000,
                          threshold=0.5):
@@ -202,6 +229,8 @@ class BinaryEvaluator:
         actual_values = {}
         for i in range(iters):
             inds_b = np.random.choice(inds, size=len(inds), replace=True)
+            if len(np.unique(labels[inds_b])) < 2: # must have both labels
+                continue
             l_b, p_b = labels[inds_b], predictions[inds_b]
             p_b_l = predicted_labels[inds_b]
             for m in metrics:
@@ -223,7 +252,6 @@ class BinaryEvaluator:
                     actual_values[m] = metrics[m](labels, predicted_labels)
             else:
                 actual_values[m] = metrics[m](labels, predictions)
-
         results = {}
         for v in values:
             mean = '{:.2f}'.format(round(actual_values[v], 2))
@@ -232,3 +260,79 @@ class BinaryEvaluator:
             results[v] = f"{mean} [{lower}, {upper}]"
 
         return results
+
+    def compute_prevalence(self, labels, predictions=None):
+        """
+        Allows predictions so that I don't have to call funtion differently
+        than other metrics but of course doesn't use 
+        """
+        return np.mean(labels)
+
+
+class BinaryGroupEvaluator(BinaryEvaluator):
+    
+    def __init__(self, outdir, task_name=None):
+        super().__init__(outdir, task_name)
+    
+    def __call__(self, df):
+        """
+        Args:
+            df : pandas DataFrame containing the following columns
+                label : label of example
+                prediction : predictin for example
+                group : group memborship
+        Notes:
+            Examples can belong to multiple groups, df is long format
+        """
+        fig, axs = plt.subplots(1, 2, figsize=(30, 10))
+        colors = sns.color_palette(n_colors=df.group.nunique())
+        draw_baseline=True
+        elligible_groups = set(['race_White', 'race_Asian', 'race_Black', 
+            'race_Pacific Islander', 'race_Native American'])
+        for i, group in enumerate(df.groupby('group')):
+            # Only compute performance artifacts if we have > 20 labels and
+            # have both positive and negative examples
+            if len(group[1]) < 20 or group[1].label.nunique() < 2 or group[0] not in elligible_groups:
+                print(f"Not stratifying by {group[0]}")
+            else: 
+                self.get_performance_artifacts(
+                    group[1].label, 
+                    group[1].prediction,
+                    group=group[0],
+                    color=colors[i],
+                    axs=axs,
+                    draw_baseline=draw_baseline
+                )
+                draw_baseline=False
+        plt.savefig(os.path.join(self.outdir, 'group_performance_curves.png'),
+            bbox_inches='tight',
+            dpi=300)
+
+    def get_performance_artifacts(self, labels, predictions, group, color, axs, draw_baseline):
+        """
+        Computes a suite of performance measures and saves artifacts
+        """
+        results = self.bootstrap_metric(labels, predictions, self.metrics)
+        results['Group'] = group
+        results['N'] = str(len(labels))          
+        with open(os.path.join(self.outdir, f"{group}_metrics.json"), "w") as fp:
+            json.dump(results, fp)
+        self.plot_roc_curve(labels=labels,
+                            predictions=predictions,
+                            title='ROC Curve',
+                            ax=axs[0],
+                            label=group,
+                            color=color)
+        # self.plot_precision_recall(labels=labels,
+        #                            predictions=predictions,
+        #                            title='PR Curve',
+        #                            ax=axs[1],
+        #                            label=group,
+        #                            color=color)
+        self.plot_calibration_curve(labels=labels,
+                                    predictions=predictions,
+                                    title='Calibration Curve',
+                                    ax=axs[1],
+                                    label=group,
+                                    color=color,
+                                    draw_baseline=draw_baseline)

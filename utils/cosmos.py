@@ -6,10 +6,10 @@ from utils.constants import *
 import pdb
 
 def read_predictions_and_labels(
-    start_date='2022-10-28',
-    end_date='2022-10-30',
-    container='test_predictions_container',
-    model='20220705_label_HCT_deploy.pkl'):
+    start_date='2023-01-11',
+    end_date='2023-01-14',
+    container='20230218_labels_and_predictions',
+    model='20230105_label_HCT_deploy.pkl'):
     """
     Grab a batch of json inferences and reads in as dataframe
     
@@ -44,9 +44,12 @@ def read_predictions_and_labels(
         query=query,
     ))
     df = pd.DataFrame.from_records(items)
+    df = df[df['label'] != -1].reset_index() # complete case
+    df['time_to_result'] = (pd.to_datetime(df['result_time'])
+         - pd.to_datetime(df['inference_time']))
+    df = df[df['time_to_result'].dt.days < 1].reset_index() # result in 2 days
     return df
-
 
 if __name__ == '__main__':
     df = read_predictions_and_labels()
-    print(df.head())
+    pdb.set_trace()
